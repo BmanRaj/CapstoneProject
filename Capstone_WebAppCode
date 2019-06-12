@@ -1,0 +1,770 @@
+/**
+ * Serves HTML of the application for HTTP GET requests.
+ * If folderId is provided as a URL parameter, the web app will list
+ * the contents of that folder (if permissions allow). Otherwise
+ * the web app will list the contents of the root folder.
+ *
+ * @param {Object} e event parameter that can contain information
+ *     about any URL parameters provided.
+ */
+
+//Global Variables
+var sheet;
+var firstEmptyRow;
+var params
+
+function doGet(e) {
+  var template = HtmlService.createTemplateFromFile('Index');
+
+  // Retrieve and process any URL parameters, as necessary.
+  if (e.parameter.folderId) {
+    template.folderId = e.parameter.folderId;
+  } else {
+    template.folderId = 'root';
+  }
+
+  // Build and return HTML in IFRAME sandbox mode.
+  return template.evaluate()
+      .setTitle('Web App Window Title')
+      .setSandboxMode(HtmlService.SandboxMode.IFRAME);
+}
+
+
+
+//this is a function that fires when the webapp receives a POST request
+function doPost(e) {
+
+  //parse data from Webhook
+  params = e.postData.contents;
+  params = JSON.parse(e.postData.contents);
+
+
+  //Set Patient Parameters
+  var patientFirstName = params.queryResult.outputContexts[0].parameters.patient_first_name;
+  var patientLastName = params.queryResult.outputContexts[0].parameters.patient_last_name;
+  var patientDOB = getDate(params.queryResult.outputContexts[0].parameters.patient_dob.date);
+  var patientGender = params.queryResult.outputContexts[0].parameters.patient_gender;
+  var patientIllness = params.queryResult.outputContexts[0].parameters.patient_illness;
+
+  //create new gsheet with patient name and DOB
+  var dataFile = SpreadsheetApp.create(patientFirstName+"_"+patientLastName+"_"+patientDOB);
+  sheet = dataFile.getActiveSheet();
+
+  //Submit Raw Data (Backup)
+  var rawSheet = SpreadsheetApp.create("Raw_Data_"+patientFirstName+"_"+patientLastName+Date.now());
+  rawSheet = rawSheet.getActiveSheet();
+  rawSheet.getRange(1,1).setValue(e.postData.contents);
+
+  //set headers
+  sheet.getRange(1,1).setValue("Family ID");
+  sheet.getRange(1,2).setValue("Individual ID");
+  sheet.getRange(1,3).setValue("Father ID");
+  sheet.getRange(1,4).setValue("Mother ID");
+  sheet.getRange(1,5).setValue("Sex");
+  sheet.getRange(1,6).setValue("First Name");
+  sheet.getRange(1,7).setValue("Last Name");
+  sheet.getRange(1,8).setValue("DOB");
+  sheet.getRange(1,9).setValue("Deceased")
+
+
+  //Set IDs for each family member
+  var patient_ID = 101
+  var patient_PartnerID = 102
+  var patient_Child1ID = 103
+  var patient_Child2ID = 104
+  var patient_Child3ID = 105
+  var patient_ChildLossID = 106
+  var patient_PreviousPartnerID = 202
+  var patient_PreviousChild1ID = 203
+  var patient_PreviousChild2ID = 204
+  var patient_PreviousChildLossID = 205
+  var sibling1_ID = 111
+  var sibling1_PartnerID = 112
+  var sibling1_Child1ID = 113
+  var sibling1_Child2ID = 114
+  var sibling1_ChildLossID = 115
+  var sibling2_ID = 121
+  var sibling2_PartnerID = 122
+  var sibling2_Child1ID = 123
+  var sibling2_Child2ID = 124
+  var sibling2_ChildLossID = 125
+  var half_sibling1ID = 191
+  var half_sibling1_PartnerID = 192
+  var half_sibling1_Child1ID = 193
+  var half_sibling1_Child2ID = 194
+  var half_sibling1_ChildLossID = 195
+  var patient_fatherID = 301
+  var patient_motherID = 302
+  var father_Sibling1ID = 311
+  var father_Sibling1PartnerID = 312
+  var father_Sibling1Child1ID = 313
+  var father_Sibling1Child2ID = 314
+  var father_Sibling1ChildLossID = 315
+  var father_Sibling2ID = 321
+  var father_Sibling2PartnerID = 322
+  var father_Sibling2Child1ID = 323
+  var father_Sibling2Child2ID = 324
+  var father_Sibling2ChildLossID = 325
+  var mother_Sibling1ID = 331
+  var mother_Sibling1PartnerID = 332
+  var mother_Sibling1Child1ID = 333
+  var mother_Sibling1Child2ID = 334
+  var mother_Sibling1ChildLossID = 335
+  var mother_Sibling2ID = 341
+  var mother_Sibling2PartnerID = 342
+  var mother_Sibling2Child1ID = 343
+  var mother_Sibling2Child2ID = 344
+  var mother_Sibling2ChildLossID = 336
+  var mother_GrandfatherID = 403
+  var mother_GrandmotherID = 404
+  var father_GrandfatherID = 401
+  var father_GrandmotherID = 402
+
+  //set Patient Data
+  firstEmptyRow = sheet.getLastRow() + 1;
+  setPED(1, firstEmptyRow)
+  setID(patient_ID,firstEmptyRow)
+  setFatherID(patient_fatherID, firstEmptyRow)
+  setMotherID(patient_motherID, firstEmptyRow)
+  setSex(patientGender, firstEmptyRow)
+  setFirstName (patientFirstName, firstEmptyRow)
+  setLastName (patientLastName, firstEmptyRow)
+  setDOB (patientDOB, firstEmptyRow)
+  if (patientIllness == "TRUE") {
+    var patientCancerType = params.queryResult.outputContexts[0].parameters.patient_c_type;
+    var patientDiagnosisDate = params.queryResult.outputContexts[0].parameters.patient_diagnosis_date;
+    setAffected(patientCancerType, firstEmptyRow, patientDiagnosisDate)
+  }
+
+
+ //Pass the parameters for each person to add (e.g. Status, First Name, Last Name, Gender, DOB, IllnessStatus, Cancer Type,  Diagnosis Date, Person ID, Father ID, Mother ID)
+
+  //ADD PATIENT FAMILY//
+
+  //Add partner
+  addPerson("patient_partner_status", "patient_partner_name", "patient_partner_lastname", "patient_partner_gender", "patient_partner_dob", "patient_partner_illness", "patient_partner_c_type", "patient_partner_diagnosis_date", patient_PartnerID, 0, 0)
+
+  //Determine the father and mother of the children
+  if (patientGender == "Male" || patientGender == "MALE") {
+    var fatherID = patient_ID
+    var motherID = patient_PartnerID
+    var lastname = "patient_last_name"
+    }
+  else if (patientGender == "Female" || patientGender == "FEMALE") {
+    var fatherID = patient_PartnerID
+    var motherID = patient_ID
+    var lastname = "patient_partner_lastname"
+  }
+
+  //Add Patient Children
+  addPerson("patient_child1_status", "patient_child1_name", lastname, "patient_child1_gender", "patient_child1_dob", "patient_child1_illness", "patient_child1_c_type", "patient_child1_diagnosis_date", patient_Child1ID, fatherID, motherID)
+  addPerson("patient_child2_status", "patient_child2_name", lastname, "patient_child2_gender", "patient_child2_dob", "patient_child2_illness", "patient_child2_c_type", "patient_child2_diagnosis_date", patient_Child2ID, fatherID, motherID)
+  addDeceasedPerson("patient_child_loss_status", "patient_child_loss_name", lastname, "patient_child_loss_gender", "patient_child_loss_dob", "patient_child_loss_illness", "patient_child_loss_c_type", "patient_child_loss_diagnosis_date", patient_ChildLossID, fatherID, motherID)
+
+  ////////////////////////////////////////////////
+
+  //ADD PATIENT PREVIOUS FAMILY//
+
+  //Add Previous Partner
+  addPerson("previous_partner_status", "previous_partner_name", "previous_partner_lastname", "previous_partner_gender", "previous_partner_dob", "previous_partner_illness", "previous_partner_c_type", "previous_partner_diagnosis_date", patient_PreviousPartnerID, 0, 0)
+
+    //Determine the father and mother of the children
+  if (patientGender == "Male" || patientGender == "MALE") {
+    var fatherID = patient_ID
+    var motherID = patient_PreviousPartnerID
+    var lastname = "patient_last_name"
+    }
+  else if (patientGender == "Female" || patientGender == "FEMALE") {
+    var fatherID = patient_PreviousPartnerID
+    var motherID = patient_ID
+    var lastname = "parevious_partner_lastname"
+  }
+
+  //Add Previous Children
+  addPerson("previous_child1_status", "previous_child1_name", lastname, "previous_child1_gender", "previous_child1_dob", "previous_child1_illness", "previous_child1_c_type", "previous_child1_diagnosis_date", patient_PreviousChild1ID, fatherID, motherID)
+  addPerson("previous_child2_status", "previous_child2_name", lastname, "previous_child2_gender", "previous_child2_dob", "previous_child2_illness", "previous_child2_c_type", "previous_child2_diagnosis_date", patient_PreviousChild2ID, fatherID, motherID)
+  addDeceasedPerson("previous_child_loss_status", "previous_child_loss_name", lastname, "previous_child_loss_gender", "previous_child_loss_dob", "previous_child_loss_illness", "previous_child_loss_c_type", "previous_child_loss_diagnosis_date", patient_PreviousChildLossID, fatherID, motherID)
+
+  ///////////////////////////////////////////
+
+  //ADD PATIENT SIBLING 1 FAMILY//
+
+  //Add Sibling 1
+ addPerson("sibling1_status", "sibling1_name", "sibling1_lastname", "sibling1_gender", "sibling1_dob", "sibling1_illness", "sibling1_c_type", "sibling1_diagnosis_date", sibling1_ID, patient_fatherID, patient_motherID)
+
+ //Add Sibling 1 Partner
+ addPerson("sibling1_partner_status", "sibling1_partner_name", "sibling1_partner_lastname", "sibling1_partner_gender", "sibling1_partner_dob", "sibling1_partner_illness", "sibling1_partner_c_type", "sibling1_partner_diagnosis_date", sibling1_PartnerID, 0, 0)
+
+ //Determine the father and mother of the children
+ var sibling1Gender = params.queryResult.outputContexts[0].parameters.sibling1_gender;
+  if (sibling1Gender == "Male" || patientGender == "MALE") {
+    var fatherID = sibling1_ID
+    var motherID = sibling1_PartnerID
+    var lastname = "sibling1_lastname"
+    }
+  else if (sibling1Gender == "Female" || patientGender == "FEMALE") {
+    var fatherID = sibling1_PartnerID
+    var motherID = sibling1_ID
+    var lastname = "sibling1_partner_lastname"
+  }
+
+  //Add Sibling 1 Children
+  addPerson("sibling1_child1_status", "sibling1_child1_name", lastname, "sibling1_child1_gender", "sibling1_child1_dob", "sibling1_child1_illness", "sibling1_child1_c_type", "sibling1_child1_diagnosis_date", sibling1_Child1ID, fatherID, motherID)
+  addPerson("sibling1_child2_status", "sibling1_child2_name", lastname, "sibling1_child2_gender", "sibling1_child2_dob", "sibling1_child2_illness", "sibling1_child2_c_type", "sibling1_child2_diagnosis_date", sibling1_Child2ID, fatherID, motherID)
+  addDeceasedPerson ("sibling1_child_loss_status", "sibling1_child_loss_name", lastname, "sibling1_child_loss_gender", "sibling1_child_loss_dob", "sibling1_child_loss_illness", "sibling1_child_loss_c_type", "sibling1_child_loss_diagnosis_date", sibling1_ChildLossID, fatherID, motherID)
+
+  ////////////////////////////////////////
+
+ //ADD PATIENT SIBLING 2 FAMILY//
+
+  //Add Sibling 2
+addPerson("sibling2_status", "sibling2_name", "sibling2_lastname", "sibling2_gender", "sibling2_dob", "sibling2_illness", "sibling2_c_type", "sibling2_diagnosis_date", sibling2_ID, patient_fatherID, patient_motherID)
+
+//Add Sibling 2 Partner
+addPerson("sibling2_partner_status", "sibling2_partner_name", "sibling2_partner_lastname", "sibling2_partner_gender", "sibling2_partner_dob", "sibling2_partner_illness", "sibling2_partner_c_type", "sibling2_partner_diagnosis_date", sibling2_PartnerID, 0, 0)
+
+//Determine the father and mother of the children
+var sibling2Gender = params.queryResult.outputContexts[0].parameters.sibling2_gender;
+ if (sibling2Gender == "Male" || patientGender == "MALE") {
+   var fatherID = sibling2_ID
+   var motherID = sibling2_PartnerID
+   var lastname = "sibling2_lastname"
+   }
+ else if (sibling2Gender == "Female" || patientGender == "FEMALE") {
+   var fatherID = sibling2_PartnerID
+   var motherID = sibling2_ID
+   var lastname = "sibling2_partner_lastname"
+ }
+
+ //Add Sibling 2 Children
+ addPerson("sibling2_child1_status", "sibling2_child1_name", lastname, "sibling2_child1_gender", "sibling2_child1_dob", "sibling2_child1_illness", "sibling2_child1_c_type", "sibling2_child1_diagnosis_date", sibling2_Child1ID, fatherID, motherID)
+ addPerson("sibling2_child2_status", "sibling2_child2_name", lastname, "sibling2_child2_gender", "sibling2_child2_dob", "sibling2_child2_illness", "sibling2_child2_c_type", "sibling2_child2_diagnosis_date", sibling2_Child2ID, fatherID, motherID)
+ addDeceasedPerson("sibling2_child_loss_status", "sibling2_child_loss_name", lastname, "sibling2_child_loss_gender", "sibling2_child_loss_dob", "sibling2_child_loss_illness", "sibling2_child_loss_c_type", "sibling2_child_loss_diagnosis_date", sibling2_ChildLossID, fatherID, motherID)
+
+ //////////////////////////////////////////////
+
+ //ADD PATIENT HALF SIBLING 1 FAMILY//
+
+ //Determin the half sibling parents
+ var halfsiblingParent = params.queryResult.outputContexts[0].parameters.half_sibling1_parents_side;
+  if ( halfsiblingParent == "Mother" ) {
+    var halfsibling1_MotherID = patient_motherID
+    var halfsibling1_FatherID = 907
+    }
+  else if (halfsiblingParent == "Father" ) {
+    var halfsibling1_FatherID = patient_fatherID
+    var halfsibling1_MotherID = 908
+    }
+
+  //Add Half Sibling 1
+addPerson("half_sibling1_status", "half_sibling1_name", "half_sibling1_lastname", "half_sibling1_gender", "half_sibling1_dob", "half_sibling1_illness", "half_sibling1_c_type", "half_sibling1_diagnosis_date", half_sibling1ID, patient_fatherID, patient_motherID)
+
+//Add Half Sibling 1 Partner
+addPerson("half_sibling1_partner_status", "half_sibling1_partner_name", "half_sibling1_partner_lastname", "half_sibling1_partner_gender", "half_sibling1_partner_dob", "half_sibling1_partner_illness", "half_sibling1_partner_c_type", "half_sibling1_partner_diagnosis_date", half_sibling1_PartnerID, 0, 0)
+
+//Determine the father and mother of the children
+var half_sibling1Gender = params.queryResult.outputContexts[0].parameters.half_sibling1_gender;
+if (half_sibling1Gender == "Male" || patientGender == "MALE") {
+  var fatherID = half_sibling1ID
+  var motherID = half_sibling1_PartnerID
+  lastname = "half_sibling1_lastname"
+  }
+else if (half_sibling1Gender == "Female" || patientGender == "FEMALE") {
+  var fatherID = half_sibling1_PartnerID
+  var motherID = half_sibling1ID
+  var lastname = "half_sibling1_partner_lastname"
+}
+
+//Add Half Sibling 1 Children
+addPerson("half_sibling1_child1_status", "half_sibling1_child1_name", lastname, "half_sibling1_child1_gender", "half_sibling1_child1_dob", "half_sibling1_child1_illness", "half_sibling1_child1_c_type", "half_sibling1_child1_diagnosis_date", half_sibling1_Child1ID, fatherID, motherID)
+addPerson("half_sibling1_child2_status", "half_sibling1_child2_name", lastname, "half_sibling1_child2_gender", "half_sibling1_child2_dob", "half_sibling1_child2_illness", "half_sibling1_child2_c_type", "half_sibling1_child2_diagnosis_date", half_sibling1_Child2ID, fatherID, motherID)
+addDeceasedPerson("h_sibling1_child_loss_status", "h_sibling1_child_loss_name", lastname, "h_sibling1_child_loss_gender", "h_sibling1_child_loss_dob", "h_sibling1_child_loss_illness", "h_sibling1_child_loss_c_type", "h_sibling1_child_loss_diagnosis_date", half_sibling1_ChildLossID, fatherID, motherID)
+
+////////////////////////////////////////////////
+
+//ADD PATIENT PARENTS//
+
+//Check if father is alive or not before adding
+var fatherAliveStatus = params.queryResult.outputContexts[0].parameters.father_alive_status;
+  if (fatherAliveStatus == "TRUE") {
+    addPerson("father_status", "father_name", "father_lastname", "father_gender", "father_dob", "father_illness", "father_c_type", "father_diagnosis_date", patient_fatherID, father_GrandfatherID, father_GrandmotherID)
+  }
+  else if (fatherAliveStatus == "FALSE") {
+    addDeceasedPerson("father_status", "father_name", "father_lastname", "father_gender", "father_dob", "father_illness", "father_c_type", "father_diagnosis_date", patient_fatherID, father_GrandfatherID, father_GrandmotherID)
+  }
+
+
+  //Check if mother is alive or not before adding
+var motherAliveStatus = params.queryResult.outputContexts[0].parameters.mother_alive_status;
+  if (motherAliveStatus = "TRUE") {
+    addPerson("mother_status", "mother_name", "mother_lastname", "mother_gender", "mother_dob", "mother_illness", "mother_c_type", "mother_diagnosis_date", patient_motherID, mother_GrandfatherID, mother_GrandmotherID)
+  }
+  else if (motherAliveStatus = "FALSE") {
+   addDeceasedPerson("mother_status", "mother_name", "mother_lastname", "mother_gender", "mother_dob", "mother_illness", "mother_c_type", "mother_diagnosis_date", patient_motherID, mother_GrandfatherID, mother_GrandmotherID)
+  }
+
+
+/////////////////////////////////////////////////
+
+ //ADD FATHER SIBLINGS//
+
+  //Add Father Sibling 1
+  addPerson("father_sibling1_status", "father_sibling1_name", "father_sibling1_lastname", "father_sibling1_gender", "father_sibling1_dob", "father_sibling1_illness", "father_sibling1_c_type", "father_sibling1_diagnosis_date", father_Sibling1ID, father_GrandfatherID, father_GrandmotherID)
+
+  //Add Father Sibling 1 Partner
+  addPerson("f_sibling1_partner_status", "f_sibling1_partner_name", "f_sibling1_partner_lastname", "f_sibling1_partner_gender", "f_sibling1_partner_dob", "f_sibling1_partner_illness", "f_sibling1_partner_c_type", "f_sibling1_partner_diagnosis_date", father_Sibling1PartnerID, 0, 0)
+
+  //Determine the father and mother of the children
+var father_sibling1Gender = params.queryResult.outputContexts[0].parameters.father_sibling1_gender;
+if (father_sibling1Gender == "Male" || patientGender == "MALE") {
+  var fatherID = father_Sibling1ID
+  var motherID = father_Sibling1PartnerID
+  var lastname = "father_sibling1_lastname"
+  }
+else if (father_sibling1Gender == "Female" || patientGender == "FEMALE") {
+  var fatherID = father_Sibling1PartnerID
+  var motherID = father_Sibling1ID
+  var lastname = "f_sibling1_partner_lastname"
+}
+
+
+  //Add Father Sibling 1 Children
+ addPerson("f_sibling1_child1_status", "f_sibling1_child1_name", lastname, "f_sibling1_child1_gender", "f_sibling1_child1_dob", "f_sibling1_child1_illness", "f_sibling1_child1_c_type", "f_sibling1_child1_diagnosis_date", father_Sibling1Child1ID, fatherID, motherID)
+ addPerson("f_sibling1_child2_status", "f_sibling1_child2_name", lastname, "f_sibling1_child2_gender", "f_sibling1_child2_dob", "f_sibling1_child2_illness", "f_sibling1_child2_c_type", "f_sibling1_child2_diagnosis_date", father_Sibling1Child2ID, fatherID, motherID)
+ addDeceasedPerson("f_sibling1_child_loss_status", "f_sibling1_child_loss_name", lastname, "f_sibling1_child_loss_gender", "f_sibling1_child_loss_dob", "f_sibling1_child_loss_illness", "f_sibling1_child_loss_c_type", "f_sibling1_child_loss_diagnosis_date", father_Sibling1ChildLossID, fatherID, motherID)
+
+
+
+ //Add Father Sibling 2
+  addPerson("father_sibling2_status", "father_sibling2_name", "father_sibling2_lastname", "father_sibling2_gender", "father_sibling2_dob", "father_sibling2_illness", "father_sibling2_c_type", "father_sibling2_diagnosis_date", father_Sibling2ID, father_GrandfatherID, father_GrandmotherID)
+
+  //Add Father Sibling 2 Partner
+  addPerson("f_sibling2_partner_status", "f_sibling2_partner_name", "f_sibling2_partner_lastname", "f_sibling2_partner_gender", "f_sibling2_partner_dob", "f_sibling2_partner_illness", "f_sibling2_partner_c_type", "f_sibling2_partner_diagnosis_date", father_Sibling2PartnerID, 0, 0)
+
+  //Determine the father and mother of the children
+var father_sibling2Gender = params.queryResult.outputContexts[0].parameters.father_sibling2_gender;
+if (father_sibling2Gender == "Male" || patientGender == "MALE") {
+  var fatherID = father_Sibling2ID
+  var motherID = father_Sibling2PartnerID
+  var lastname = "father_sibling2_lastname"
+  }
+else if (father_sibling2Gender == "Female" || patientGender == "FEMALE") {
+  var fatherID = father_Sibling2PartnerID
+  var motherID = father_Sibling2ID
+  var lastname = "f_sibling2_partner_lastname"
+}
+
+
+  //Add Father Sibling 2 Children
+ addPerson("f_sibling2_child1_status", "f_sibling2_child1_name", lastname, "f_sibling2_child1_gender", "f_sibling2_child1_dob", "f_sibling2_child1_illness", "f_sibling2_child1_c_type", "f_sibling2_child1_diagnosis_date", father_Sibling2Child1ID, fatherID, motherID)
+ addPerson("f_sibling2_child2_status", "f_sibling2_child2_name", lastname, "f_sibling2_child2_gender", "f_sibling2_child2_dob", "f_sibling2_child2_illness", "f_sibling2_child2_c_type", "f_sibling2_child2_diagnosis_date", father_Sibling2Child2ID, fatherID, motherID)
+ addDeceasedPerson("f_sibling2_child_loss_status", "f_sibling2_child_loss_name", lastname, "f_sibling2_child_loss_gender", "f_sibling2_child_loss_dob", "f_sibling2_child_loss_illness", "f_sibling2_child_loss_c_type", "f_sibling2_child_loss_diagnosis_date", father_Sibling2ChildLossID, fatherID, motherID)
+
+
+ ////////////////////////////////////////////////////
+
+ //ADD MOTHER SIBLINGS//
+
+  //Add Mother Sibling 1
+  addPerson("mother_sibling1_status", "mother_sibling1_name", "mother_sibling1_lastname", "mother_sibling1_gender", "mother_sibling1_dob", "mother_sibling1_illness", "mother_sibling1_c_type", "mother_sibling1_diagnosis_date", mother_Sibling1ID, mother_GrandfatherID, mother_GrandmotherID)
+
+  //Add Mother Sibling 1 Partner
+  addPerson("m_sibling1_partner_status", "m_sibling1_partner_name", "m_sibling1_partner_lastname", "m_sibling1_partner_gender", "m_sibling1_partner_dob", "m_sibling1_partner_illness", "m_sibling1_partner_c_type", "m_sibling1_partner_diagnosis_date", mother_Sibling1PartnerID, 0, 0)
+
+  //Determine the father and mother of the children
+var mother_sibling1Gender = params.queryResult.outputContexts[0].parameters.mother_sibling1_gender;
+if (mother_sibling1Gender == "Male" || patientGender == "MALE") {
+  var fatherID = mother_Sibling1ID
+  var motherID = mother_Sibling1PartnerID
+  var lastname = "mother_sibling1_lastname"
+  }
+else if (mother_sibling1Gender == "Female" || patientGender == "FEMALE") {
+  var fatherID = mother_Sibling1PartnerID
+  var motherID = mother_Sibling1ID
+  var lastname = "m_sibling1_partner_lastname"
+}
+
+  //Add Mother Sibling 1 Children
+ addPerson("m_sibling1_child1_status", "m_sibling1_child1_name", lastname, "m_sibling1_child1_gender", "m_sibling1_child1_dob", "m_sibling1_child1_illness", "m_sibling1_child1_c_type", "m_sibling1_child1_diagnosis_date", mother_Sibling1Child1ID, fatherID, motherID)
+ addPerson("m_sibling1_child2_status", "m_sibling1_child2_name", lastname, "m_sibling1_child2_gender", "m_sibling1_child2_dob", "m_sibling1_child2_illness", "m_sibling1_child2_c_type", "m_sibling1_child2_diagnosis_date", mother_Sibling1Child2ID, fatherID, motherID)
+ addDeceasedPerson("m_sibling1_child_loss_status", "m_sibling1_child_loss_name", lastname, "m_sibling1_child_loss_gender", "m_sibling1_child_loss_dob", "m_sibling1_child_loss_illness", "m_sibling1_child_loss_c_type", "m_sibling1_child_loss_diagnosis_date", mother_Sibling1ChildLossID, fatherID, motherID)
+
+ //Add Mother Sibling 2
+  addPerson("mother_sibling2_status", "mother_sibling2_name", "mother_sibling2_lastname", "mother_sibling2_gender", "mother_sibling2_dob", "mother_sibling2_illness", "mother_sibling2_c_type", "mother_sibling2_diagnosis_date", mother_Sibling2ID, mother_GrandfatherID, mother_GrandmotherID)
+
+  //Add Mother Sibling 2 Partner
+  addPerson("m_sibling2_partner_status", "m_sibling2_partner_name", "m_sibling2_partner_lastname", "m_sibling2_partner_gender", "m_sibling2_partner_dob", "m_sibling2_partner_illness", "m_sibling2_partner_c_type", "m_sibling2_partner_diagnosis_date", mother_Sibling2PartnerID, 0, 0)
+
+  //Determine the father and mother of the children
+var mother_sibling2Gender = params.queryResult.outputContexts[0].parameters.mother_sibling2_gender;
+if (mother_sibling2Gender == "Male" || patientGender == "MALE") {
+  var fatherID = mother_Sibling2ID
+  var motherID = mother_Sibling2PartnerID
+  var lastname = "mother_sibling2_lastname"
+  }
+else if (mother_sibling2Gender == "Female" || patientGender == "FEMALE") {
+  var fatherID = mother_Sibling2PartnerID
+  var motherID = mother_Sibling2ID
+  var lastname = "m_sibling2_partner_lastname"
+}
+
+
+  //Add Father Sibling 2 Children
+ addPerson("m_sibling2_child1_status", "m_sibling2_child1_name", lastname, "m_sibling2_child1_gender", "m_sibling2_child1_dob", "m_sibling2_child1_illness", "m_sibling2_child1_c_type", "m_sibling2_child1_diagnosis_date", mother_Sibling2Child1ID, fatherID, motherID)
+ addPerson("m_sibling2_child2_status", "m_sibling2_child2_name", lastname, "m_sibling2_child2_gender", "m_sibling2_child2_dob", "m_sibling2_child2_illness", "m_sibling2_child2_c_type", "m_sibling2_child2_diagnosis_date", mother_Sibling2Child2ID, fatherID, motherID)
+ addDeceasedPerson("m_sibling2_child_loss_status", "m_sibling2_child_loss_name", lastname, "m_sibling2_child_loss_gender", "m_sibling2_child_loss_dob", "m_sibling2_child_loss_illness", "m_sibling2_child_loss_c_type", "m_sibling2_child_loss_diagnosis_date", mother_Sibling2ChildLossID, fatherID, motherID)
+
+////////////////////////////////////////////////////////
+
+
+//ADD GRANDPARENTS ON FATHERS SIDE//
+
+ //Check if grandfather is alive or not before adding
+var grandfather_AliveStatus = params.queryResult.outputContexts[0].parameters.f_grandfather_alive_status;
+  if (grandfather_AliveStatus == "TRUE") {
+    addPerson("f_grandfather_status", "f_grandfather_name", "f_grandfather_lastname", "f_grandfather_gender", "f_grandfather_dob", "f_grandfather_illness", "f_grandfather_c_type", "f_grandfather_diagnosis_date", father_GrandfatherID, 0, 0)
+  }
+  else if (grandfather_AliveStatus == "FALSE") {
+    addDeceasedPerson("f_grandfather_status", "f_grandfather_name", "f_grandfather_lastname", "f_grandfather_gender", "f_grandfather_dob", "f_grandfather_illness", "f_grandfather_c_type", "f_grandfather_diagnosis_date", father_GrandfatherID, 0, 0)
+  }
+
+
+  //Check if grandmother is alive or not before adding
+var grandmother_AliveStatus = params.queryResult.outputContexts[0].parameters.f_grandmother_alive_status;
+  if (grandmother_AliveStatus == "TRUE") {
+    addPerson("f_grandmother_status", "f_grandmother_name", "f_grandmother_lastname", "f_grandmother_gender", "f_grandmother_dob", "f_grandmother_illness", "f_grandmother_c_type", "f_grandmother_diagnosis_date", father_GrandmotherID, 0, 0)
+  }
+  else if (grandmother_AliveStatus == "FALSE") {
+   addDeceasedPerson("f_grandmother_status", "f_grandmother_name", "f_grandmother_lastname", "f_grandmother_gender", "f_grandmother_dob", "f_grandmother_illness", "f_grandmother_c_type", "f_grandmother_diagnosis_date", father_GrandmotherID, 0, 0)
+  }
+
+/////////////////////////////////////////////
+
+  //ADD GRANDPARENTS ON MOTHERS SIDE//
+
+
+ //Check if grandfather is alive or not before adding
+var grandfather_AliveStatus = params.queryResult.outputContexts[0].parameters.m_grandfather_alive_status;
+  if (grandfather_AliveStatus == "TRUE") {
+    addPerson("m_grandfather_status", "m_grandfather_name", "m_grandfather_lastname", "m_grandfather_gender", "m_grandfather_dob", "m_grandfather_illness", "m_grandfather_c_type", "m_grandfather_diagnosis_date", mother_GrandfatherID, 0, 0)
+  }
+  else if (grandfather_AliveStatus = "FALSE") {
+    addDeceasedPerson("m_grandfather_status", "m_grandfather_name", "m_grandfather_lastname", "m_grandfather_gender", "m_grandfather_dob", "m_grandfather_illness", "m_grandfather_c_type", "m_grandfather_diagnosis_date", mother_GrandfatherID, 0, 0)
+  }
+
+
+  //Check if grandmother is alive or not before adding
+var grandmother_AliveStatus = params.queryResult.outputContexts[0].parameters.m_grandmother_alive_status;
+  if (grandmother_AliveStatus == "TRUE") {
+    addPerson("m_grandmother_status", "m_grandmother_name", "m_grandmother_lastname", "m_grandmother_gender", "m_grandmother_dob", "m_grandmother_illness", "m_grandmother_c_type", "m_grandmother_diagnosis_date", mother_GrandmotherID, 0, 0)
+  }
+  else if (grandmother_AliveStatus == "FALSE") {
+   addDeceasedPerson("m_grandmother_status", "m_grandmother_name", "m_grandmother_lastname", "m_grandmother_gender", "m_grandmother_dob", "m_grandmother_illness", "m_grandmother_c_type", "m_grandmother_diagnosis_date", mother_GrandmotherID, 0, 0)
+  }
+
+
+
+
+
+ //DO NOT EDIT BEYOND THIS//
+
+
+   SpreadsheetApp.flush();
+   var filename = dataFile.getName()
+   sendEmail (filename);
+
+  return HtmlService.createHtmlOutput("post request received");
+
+
+//Method to add person
+
+ function addPerson (p_status, p_firstname, p_lastname, p_gender, p_dob, p_illness, p_cancertype, p_diagnosisdate, p_id, p_fatherid, p_motherid) {
+    firstEmptyRow = sheet.getLastRow() + 1;
+    var personstatus = params.queryResult.outputContexts[0].parameters[p_status];
+    if (personstatus == "TRUE"|| personstatus == "true") {
+      try {
+      var firstname = params.queryResult.outputContexts[0].parameters[p_firstname];
+      var lastname = params.queryResult.outputContexts[0].parameters[p_lastname];
+      var gender = params.queryResult.outputContexts[0].parameters[p_gender];
+      var illness = params.queryResult.outputContexts[0].parameters[p_illness];
+      var dob = getDate(params.queryResult.outputContexts[0].parameters[p_dob].date);
+      }
+      catch (err) {
+        Logger.log ("Error reading params")
+      }
+      setPED(1, firstEmptyRow)
+      setID(p_id,firstEmptyRow)
+      setFatherID(p_fatherid, firstEmptyRow)
+      setMotherID(p_motherid, firstEmptyRow)
+      setSex(gender, firstEmptyRow)
+      setFirstName (firstname, firstEmptyRow)
+      setLastName (lastname, firstEmptyRow)
+      setDOB (dob, firstEmptyRow)
+     if (illness == "TRUE" || illness == "true") {
+       try {
+         var personCancerType = params.queryResult.outputContexts[0].parameters[p_cancertype];
+         var personDiagnosisDate = params.queryResult.outputContexts[0].parameters[p_diagnosisdate];
+         setAffected(personCancerType,firstEmptyRow,personDiagnosisDate)
+       }
+       catch (err) {
+         Logger.log("Error reading affected OR diagnosis date")
+       }
+   }
+  }
+ }
+
+
+  //Method to add deceased person
+  function addDeceasedPerson (p_status, p_firstname, p_lastname, p_gender, p_dob, p_illness, p_cancertype, p_diagnosisdate, p_id, p_fatherid, p_motherid) {
+    firstEmptyRow = sheet.getLastRow() + 1;
+    var personstatus = params.queryResult.outputContexts[0].parameters[p_status];
+    if (personstatus == "TRUE"|| personstatus == "true") {
+      try {
+        var firstname = params.queryResult.outputContexts[0].parameters[p_firstname];
+        var lastname = params.queryResult.outputContexts[0].parameters[p_lastname];
+        var gender = params.queryResult.outputContexts[0].parameters[p_gender];
+        var illness = params.queryResult.outputContexts[0].parameters[p_illness];
+        var dob = getDate(params.queryResult.outputContexts[0].parameters[p_dob].date);
+         }
+      catch (err) {
+        Logger.log ("Error reading params")
+      }
+    setPED(1, firstEmptyRow)
+    setID(p_id,firstEmptyRow)
+    setFatherID(p_fatherid, firstEmptyRow)
+    setMotherID(p_motherid, firstEmptyRow)
+    setSex(gender, firstEmptyRow)
+    setFirstName (firstname, firstEmptyRow)
+    setLastName (lastname, firstEmptyRow)
+    setDOB (dob, firstEmptyRow)
+    setDeceased(firstEmptyRow)
+     if (illness == "TRUE" || illness == "true") {
+       try {
+        var personCancerType = params.queryResult.outputContexts[0].parameters[p_cancertype];
+         var personDiagnosisDate = params.queryResult.outputContexts[0].parameters[p_diagnosisdate];
+         setAffected(personCancerType,firstEmptyRow,personDiagnosisDate)
+       }
+       catch (err) {
+         Logger.log("Error reading affected OR diagnosis date")
+       }
+   }
+  }
+ }
+
+
+}
+
+
+//Methods to set parameters
+
+function setPED (id, row) {
+   sheet.getRange(row, 1).setValue(id)
+}
+
+  function setID (id, row) {
+  sheet.getRange(row, 2).setValue(id)
+}
+
+  function setFatherID (id, row) {
+  sheet.getRange(row, 3).setValue(id)
+}
+
+
+function setMotherID (id, row) {
+  sheet.getRange(row, 4).setValue(id)
+}
+
+function setSex (sex, row) {
+  if (sex == "Male" || sex == "MALE") {
+    sheet.getRange(row, 5).setValue("1")
+  }
+  else if (sex == "Female" || sex == "FEMALE") {
+    sheet.getRange(row, 5).setValue("2")
+  }
+}
+
+function setFirstName (name, row ) {
+  sheet.getRange(row, 6).setValue(name)
+}
+
+function setLastName (name, row ) {
+  sheet.getRange(row, 7).setValue(name)
+}
+
+function setDOB (date, row) {
+  sheet.getRange(row, 8).setValue(date)
+}
+
+function setAffected (cancerType, row, date) {
+  var columnNeeded,data,lastColumn,affectedColumn, diagnosisDateColumn;
+  lastColumn = sheet.getLastColumn()
+  data = sheet.getRange(1,1,1,lastColumn).getValues();//Get 2D array of all values in row one
+  data = data[0];//Get the first and only inner array
+  columnNeeded = data.indexOf(cancerType) + 1;//Arrays are zero indexed- add 1
+  Logger.log('columnNeeded: ' + columnNeeded)
+
+  //Set column based on if it already exists or create new column
+  if (columnNeeded > 0 ) {
+    affectedColumn = columnNeeded
+    diagnosisDateColumn = (affectedColumn + 1)
+  }
+  else {
+    affectedColumn = (lastColumn + 1)
+    diagnosisDateColumn = (affectedColumn + 1)
+  }
+
+
+  //assign affected value
+  switch (cancerType) {
+    case "BladderCancer":
+      sheet.getRange(1,affectedColumn).setValue("BladderCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_BladderCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "BreastCancer":
+      sheet.getRange(1,affectedColumn).setValue("BreastCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_BreastCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "ColonCancer":
+     sheet.getRange(1,affectedColumn).setValue("ColonCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_ColonCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "EndometrialCancer":
+      sheet.getRange(1,affectedColumn).setValue("EndometrialCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_EndometrialCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "KidneyCancer":
+      sheet.getRange(1,affectedColumn).setValue("KidneyCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_KidneyCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "Leukemia":
+      sheet.getRange(1,affectedColumn).setValue("Leukemia");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_Leukemia");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "LiverCancer":
+     sheet.getRange(1,affectedColumn).setValue("LiverCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_LiverCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "LungCancer":
+      sheet.getRange(1,affectedColumn).setValue("LungCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_LungCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "Melanoma":
+     sheet.getRange(1,affectedColumn).setValue("Melanoma");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_MelanomaCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "Non-HodgkinLymphoma":
+     sheet.getRange(1,affectedColumn).setValue("Non-HodgkinLymphoma");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_Non-HodgkinLymphoma");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "OralCancer":
+      sheet.getRange(1,affectedColumn).setValue("OralCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+       sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_OralCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "PancreaticCancer":
+      sheet.getRange(1,affectedColumn).setValue("PancreaticCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+       sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_PancreaticCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "ProstateCancer":
+      sheet.getRange(1,affectedColumn).setValue("ProstateCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_ProstateCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    case "ThyroidCancer":
+      sheet.getRange(1,affectedColumn).setValue("ThyroidCancer");
+      sheet.getRange(row,affectedColumn).setValue("1");
+      sheet.getRange(1,diagnosisDateColumn).setValue("DiagnosisDate_ThyroidCancer");
+      sheet.getRange(row,diagnosisDateColumn).setValue(date);
+      break;
+    default:
+  }
+}
+
+/*function setDiagnosisDate (cancerType,date, row ) {
+  sheet.getRange(row, 9).setValue(date)
+}*/
+
+function setDeceased(row) {
+  sheet.getRange(row, 9).setValue("1")
+}
+
+function setAvail (val, row) {
+}
+
+
+function checkParam (param) {
+    if (param == TRUE) {
+      return true
+    }
+    else {
+      return false
+    }
+  }
+
+
+function getDate(dateparam) {
+    var date = new Date(dateparam)
+    var day = date.getDate()
+    var month = date.getMonth() + 1
+    var year = date.getFullYear()
+    return (day+"."+month+"."+year)
+  }
+
+
+  function sendEmail (filename) {
+
+   //Get Spreadsheet with Emails
+    var files = DriveApp.getFilesByName("Emails");
+    while (files.hasNext()) {
+      var file = files.next();
+      var emailfile = SpreadsheetApp.open(file).getActiveSheet();
+    }
+     //Iterate through email list
+    var lastrow = emailfile.getLastRow();
+    for (var i = 1; i<=lastrow; i++) {
+      var emailAddress = emailfile.getRange(i, 1).getValue();
+
+      //Send Data file in email
+      var file = DriveApp.getFilesByName(filename);
+      var root = DriveApp.getRootFolder();
+      if (file.hasNext()) {
+        var ss = file.next()
+        var sheetID = ss.getId();
+        var sheetName = ss.getName();
+        var requestData = {"method": "GET", "headers":{"Authorization":"Bearer "+ScriptApp.getOAuthToken()}, 'muteHttpExceptions':false,};
+        var url = "https://docs.google.com/spreadsheets/d/"+sheetID+"/export?format=csv&id="+sheetID;
+        try {
+        var result = UrlFetchApp.fetch(url, requestData);
+        }
+        catch (err) {
+          Logger.log(err)
+        }
+        var contents = result.getContent();
+        MailApp.sendEmail(emailAddress, "Family Tree Data", "Please find attached the family tree data collected for patient", {attachments:[{fileName:sheetName+".csv", content:contents, mimeType:"application//csv"}]});
+    }
+  }
+  }
